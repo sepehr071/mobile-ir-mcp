@@ -1,6 +1,6 @@
 [project]
 name = "mobile-ir-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Unofficial read-only MCP server for Mobile.ir (mobile.ir), Iran's phone database: specs, shop prices, price history, used phones, SIM numbers."
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,7 @@ dependencies = [
     "httpx>=0.27",
     "httpx-curl-cffi>=0.1.5",
     "curl-cffi>=0.16.3",
+    "certifi",
     "beautifulsoup4>=4.12",
 ]
 
