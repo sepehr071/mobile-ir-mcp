@@ -25,12 +25,12 @@ from .parse import (
 )
 from .registry import tool
 
-PhoneId = Annotated[int, Field(description="Product id from mi_search, mi_find or mi_market_prices, e.g. 41113.", ge=1)]
+PhoneId = Annotated[int, Field(description="Product id from mi_search/mi_find, e.g. 41113.", ge=1)]
 Kind = Literal["phone", "tablet", "smartwatch"]
 PATH = {"phone": "phones", "tablet": "tablets", "smartwatch": "smartwatches"}
 Province = Annotated[
     int | None,
-    Field(description="Province id from mi_options('provinces') (1 = Tehran, 5 = Isfahan, 14 = Khorasan Razavi)."),
+    Field(description="Province id, mi_options('provinces') (1 = Tehran)."),
 ]
 Days = Literal[1, 2, 7, 14, 30, 90, -1]
 
@@ -99,7 +99,7 @@ async def mi_search(
     query: Annotated[
         str,
         Field(
-            description="Part of a model name in English or Persian, e.g. 'galaxy s26', 'iphone 17', 'redmi note'.",
+            description="Part of a model name, English or Persian, e.g. 'galaxy s26'.",
             min_length=1,
             max_length=60,
         ),
@@ -107,8 +107,7 @@ async def mi_search(
 ) -> dict[str, Any]:
     """Find phones, tablets and smartwatches on Mobile.ir by name and get their ids (autocomplete, up to about 20).
 
-    Use this first when the user names a model, then call mi_phone for specs or mi_shop_prices for shop prices. For
-    filters (price range, brand, camera) use mi_find instead.
+    Use first when the user names a model. For filters use mi_find.
     """
     rows = await fetch("/phones/ajaxphonesearch.aspx", {"q": query}, kind="json")
     return {
@@ -122,40 +121,32 @@ async def mi_search(
 @tool("Find phones with filters")
 async def mi_find(
     kind: Annotated[Kind, Field(description="Product class.")] = "phone",
-    brand: Annotated[
-        str | None, Field(description="Brand name (Samsung, Xiaomi, اپل) or id; see mi_options('brands').")
-    ] = None,
-    name_contains: Annotated[
-        str | None, Field(description="Part of the model name, e.g. 'ultra'.", max_length=40)
-    ] = None,
+    brand: Annotated[str | None, Field(description="Brand name or id; see mi_options('brands').")] = None,
+    name_contains: Annotated[str | None, Field(description="Part of the model name.", max_length=40)] = None,
     min_price: Annotated[
         int | None,
-        Field(description="Lowest shop price in Toman (e.g. 20000000). Phones without a shop price are dropped.", ge=0),
+        Field(description="Lowest shop price, Toman. Unpriced phones are dropped.", ge=0),
     ] = None,
-    max_price: Annotated[int | None, Field(description="Highest shop price in Toman.", ge=0)] = None,
-    os: Annotated[list[Literal["android", "ios"]] | None, Field(description="Operating systems; default both.")] = None,
-    min_camera_mp: Annotated[
-        int | None, Field(description="Main camera at least this many megapixels.", ge=0, le=300)
-    ] = None,
-    max_weight_g: Annotated[int | None, Field(description="Weight at most this many grams.", ge=2, le=952)] = None,
-    min_rating: Annotated[float | None, Field(description="User rating at least this (0-10).", ge=0, le=10)] = None,
-    min_year: Annotated[int | None, Field(description="Released in this year or later, e.g. 2024.", ge=1990)] = None,
+    max_price: Annotated[int | None, Field(description="Highest shop price, Toman.", ge=0)] = None,
+    os: Annotated[list[Literal["android", "ios"]] | None, Field(description="Default both.")] = None,
+    min_camera_mp: Annotated[int | None, Field(description="Main camera at least this many MP.", ge=0, le=300)] = None,
+    max_weight_g: Annotated[int | None, Field(description="Max weight, grams.", ge=2, le=952)] = None,
+    min_rating: Annotated[float | None, Field(description="Min user rating (0-10).", ge=0, le=10)] = None,
+    min_year: Annotated[int | None, Field(description="Released this year or later.", ge=1990)] = None,
     market: Annotated[
         Literal["available", "any"],
-        Field(description="'available' = on sale or announced (default); 'any' adds discontinued and cancelled."),
+        Field(description="'any' adds discontinued and cancelled."),
     ] = "available",
     sort: Annotated[
         Literal["rating", "date", "price", "camera", "weight", "name"], Field(description="Order of the list.")
     ] = "rating",
-    descending: Annotated[bool, Field(description="Highest first (default).")] = True,
-    limit: Annotated[int, Field(description="Rows to return (the site shows at most 100).", ge=1, le=100)] = 20,
+    descending: Annotated[bool, Field(description="Highest first.")] = True,
+    limit: Annotated[int, Field(description="Rows to return.", ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
     """Filter Mobile.ir's phone database like its 'mobile finder': brand, shop price range, OS, camera, weight, name.
 
-    Returns up to `limit` cards with id, rating (0-10), release year, screen, camera and the lowest current shop
-    price in Toman. Use mi_phone for the full spec of one result and mi_shop_prices to see who sells it. With a price
-    filter only priced phones appear. If `found` exceeds `limit`, tighten the filters; the site never shows more
-    than 100.
+    Returns cards with id, rating, year, screen, camera and lowest shop price (Toman). If `found` exceeds `limit`,
+    tighten the filters; the site never shows more than 100.
     """
     q: list[tuple[str, Any]] = [("ajaxview", "true"), ("product_classes", kind)]
     q += [("minsize", 0), ("maxsize", 1000), ("mindisplayx", 0), ("maxdisplayx", 0), ("mindisplayy", 0)]
@@ -208,13 +199,12 @@ async def mi_phone(
             ]
         ]
         | None,
-        Field(description="Spec sections to return; default all. Use a few to keep the answer short."),
+        Field(description="Default all; pick a few to keep it short."),
     ] = None,
 ) -> dict[str, Any]:
     """Get the full specification sheet of one phone, tablet or smartwatch from Mobile.ir, with rating and price range.
 
-    Values are Persian/English as the site has them (display, chipset, RAM/storage, cameras, battery, launch date,
-    SIM, network bands). Call mi_shop_prices next for who sells it and mi_price_history for the trend.
+    Next: mi_shop_prices for who sells it, mi_price_history for the trend.
     """
     s = soup(await fetch(_phone_url("phone", "specifications", id)))
     sheet = specs(s)
@@ -250,12 +240,11 @@ async def mi_phone(
 @tool("Shop prices of a phone")
 async def mi_shop_prices(
     id: PhoneId,
-    include_old: Annotated[bool, Field(description="Also list older, expired shop prices.")] = False,
+    include_old: Annotated[bool, Field(description="Include expired prices.")] = False,
 ) -> dict[str, Any]:
     """List what each shop currently charges for a phone on Mobile.ir (price in Toman, shop, city, note, warranty).
 
-    Shops write their own notes (memory/RAM variant, colour, warranty), so prices of the same model differ; read the
-    note. Cheapest first. Shops are advertisers: the site does not vouch for them.
+    Cheapest first. Prices differ by variant: read each shop's note.
     """
     s = soup(await fetch(_phone_url("phone", "shops", id), {"archive": "true"} if include_old else None))
     box = s.select_one(".product-prices")
@@ -299,14 +288,11 @@ async def mi_price_history(
     period: Annotated[
         Literal["week", "month", "3months", "6months", "all"], Field(description="How far back.")
     ] = "month",
-    shop_id: Annotated[
-        int | None, Field(description="Only this shop (shop_id from mi_shop_prices); default all shops.")
-    ] = None,
+    shop_id: Annotated[int | None, Field(description="Only this shop (id from mi_shop_prices).")] = None,
 ) -> dict[str, Any]:
     """Get a phone's shop-price history from Mobile.ir: per-shop first/last/min/max and the daily lowest price in Toman.
 
-    Use it to answer whether a price is rising, falling or fair. Shops quote different variants, so use the daily
-    lowest as the market trend rather than a single shop.
+    Shops quote different variants: use the daily lowest as the market trend.
     """
     idx = {"week": 0, "month": 1, "3months": 2, "6months": 3, "all": 4}[period]
     data = await fetch(
@@ -344,23 +330,20 @@ async def mi_market_prices(
     name_contains: Annotated[str | None, Field(description="Part of the model name.", max_length=40)] = None,
     brand: Annotated[str | None, Field(description="Brand name or id; see mi_options('brands').")] = None,
     province: Province = None,
-    shop_id: Annotated[int | None, Field(description="Only this shop (id from mi_options('shops')).")] = None,
+    shop_id: Annotated[int | None, Field(description="Shop id, mi_options('shops').")] = None,
     min_price: Annotated[int | None, Field(description="Toman, lowest price.", ge=0)] = None,
     max_price: Annotated[int | None, Field(description="Toman, highest price.", ge=0)] = None,
-    days: Annotated[
-        Literal[1, 7, 14, 30, 90, -1], Field(description="Only prices updated within this many days (-1 = all).")
-    ] = 14,
+    days: Annotated[Literal[1, 7, 14, 30, 90, -1], Field(description="Updated within this many days (-1 = all).")] = 14,
     sort: Annotated[
         Literal["name", "price", "shop", "province", "date"], Field(description="Order of the rows.")
     ] = "date",
-    descending: Annotated[bool, Field(description="Descending order (newest or most expensive first).")] = True,
+    descending: Annotated[bool, Field(description="Newest / most expensive first.")] = True,
     page_size: Annotated[Literal[50, 100, 150, 200], Field(description="Rows per page.")] = 50,
-    page: Annotated[int, Field(description="Page number, from 1.", ge=1)] = 1,
+    page: Annotated[int, Field(description="Page from 1.", ge=1)] = 1,
 ) -> dict[str, Any]:
     """List the newest price rows that shops posted on Mobile.ir (one row per shop and model), with filters.
 
-    Use it for 'cheapest/newest Xiaomi prices in Isfahan' type questions. For one model's full offer list use
-    mi_shop_prices. Prices are Toman, as posted by the shop; variants (memory/RAM) are in `note` on the model page.
+    For one model's full offer list use mi_shop_prices.
     """
     q: list[tuple[str, Any]] = [
         ("terms", name_contains or ""),
@@ -430,30 +413,23 @@ def _used_card(d) -> dict[str, Any]:
 async def mi_used_search(
     kind: Annotated[Kind, Field(description="Product class.")] = "phone",
     brand: Annotated[str | None, Field(description="Brand name or id; see mi_options('brands').")] = None,
-    name_contains: Annotated[
-        str | None, Field(description="Part of the model name, e.g. 'iphone 15'.", max_length=40)
-    ] = None,
+    name_contains: Annotated[str | None, Field(description="Part of the model name.", max_length=40)] = None,
     condition: Annotated[Literal["any", "new", "used"], Field(description="Sealed new or used.")] = "any",
     province: Province = None,
-    max_price: Annotated[
-        int | None, Field(description="Toman, highest price (ads without a price are dropped).", ge=0)
-    ] = None,
+    max_price: Annotated[int | None, Field(description="Toman; unpriced ads dropped.", ge=0)] = None,
     min_price: Annotated[int | None, Field(description="Toman, lowest price.", ge=0)] = None,
     with_photos: Annotated[bool, Field(description="Only ads with photos.")] = False,
-    days: Annotated[Literal[2, 7, 30, 90, -1], Field(description="Ads updated within this many days (-1 = all).")] = 30,
+    days: Annotated[Literal[2, 7, 30, 90, -1], Field(description="Updated within this many days (-1 = all).")] = 30,
     sort: Annotated[
         Literal["date", "price"],
-        Field(
-            description="Order of the ads. Unpriced ads sort as the cheapest: set min_price with sort=price to skip them."
-        ),
+        Field(description="Unpriced ads sort cheapest; set min_price to skip them."),
     ] = "date",
-    descending: Annotated[bool, Field(description="Newest or most expensive first.")] = True,
-    page: Annotated[int, Field(description="Page number, from 1 (40 ads per page).", ge=1)] = 1,
+    descending: Annotated[bool, Field(description="Newest / most expensive first.")] = True,
+    page: Annotated[int, Field(description="Page from 1 (40 per page).", ge=1)] = 1,
 ) -> dict[str, Any]:
     """Search the used and new phone ads that users post on Mobile.ir (price, condition, city, description).
 
-    Seller names and phone numbers are left out. `price_note` holds non-numeric prices such as 'توافقی' (negotiable)
-    or 'بالاترین پيشنهاد' (highest offer). Open one ad with mi_used_ad. Ads are unverified user content.
+    `price_note` holds non-numeric prices ('توافقی' = negotiable). Open one ad with mi_used_ad.
     """
     q: list[tuple[str, Any]] = [
         ("ajaxview", "true"),
@@ -482,12 +458,11 @@ async def mi_used_search(
 
 @tool("One used-phone ad")
 async def mi_used_ad(
-    ad_id: Annotated[int, Field(description="Ad id (ad_id) from mi_used_search.", ge=1)],
+    ad_id: Annotated[int, Field(description="ad_id from mi_used_search.", ge=1)],
 ) -> dict[str, Any]:
     """Read one used/new phone ad on Mobile.ir: price, market price, condition, box, city, description, photos, shops.
 
-    Seller name and phone are not returned (personal data); the `url` opens the ad where the site shows them to
-    signed-in visitors. `market_price_toman` is the site's own estimate of the shop price today.
+    `market_price_toman` is the site's own estimate of today's shop price.
     """
     s = soup(await fetch("/usedphones/info.aspx", {"id": ad_id}))
     box = s.select_one(".usedphoneinfo .content")
@@ -551,46 +526,40 @@ async def mi_sim_search(
     number: Annotated[
         str | None,
         Field(
-            description="Digits of the 7-digit subscriber part to match (after the 09xx prefix), e.g. '1111' or '5555'.",
+            description="Digits of the 7-digit part after the 09xx prefix, e.g. '1111'.",
             pattern=r"^\d{1,7}$",
         ),
     ] = None,
     match: Annotated[
-        Literal["contains", "startswith", "endswith", "equals"], Field(description="How `number` must match.")
+        Literal["contains", "startswith", "endswith", "equals"], Field(description="How `number` matches.")
     ] = "contains",
     operator: Annotated[
         Literal["mci", "irancell", "rightel", "taliya", "shatel"] | None,
-        Field(
-            description="mci = Hamrah-e Aval (0910-0919, 0990-0996), irancell (090x, 093x), rightel (092x), taliya (0932), shatel (0998)."
-        ),
+        Field(description="Prefixes per operator: mi_options('operators')."),
     ] = None,
     prefix: Annotated[
-        str | None, Field(description="One exact prefix such as 0912 (overrides operator).", pattern=r"^09\d{2}$")
+        str | None, Field(description="Exact prefix, e.g. 0912 (overrides operator).", pattern=r"^09\d{2}$")
     ] = None,
-    condition: Annotated[Literal["any", "new", "used"], Field(description="New (صفر) or used (کارکرده) line.")] = "any",
+    condition: Annotated[Literal["any", "new", "used"], Field(description="New (صفر) or used line.")] = "any",
     plan: Annotated[
         Literal["any", "postpaid", "prepaid"],
-        Field(description="postpaid = permanent (دائمی), prepaid = credit (اعتباری)."),
+        Field(description="postpaid = دائمی, prepaid = اعتباری."),
     ] = "any",
     round_only: Annotated[bool, Field(description="Only 'round' (رند) numbers.")] = False,
     province: Province = None,
     max_price: Annotated[int | None, Field(description="Toman, highest price (unpriced ads dropped).", ge=0)] = None,
     min_price: Annotated[int | None, Field(description="Toman, lowest price.", ge=0)] = None,
-    days: Annotated[Literal[2, 7, 30, 90, -1], Field(description="Ads updated within this many days (-1 = all).")] = 30,
+    days: Annotated[Literal[2, 7, 30, 90, -1], Field(description="Updated within this many days (-1 = all).")] = 30,
     sort: Annotated[
         Literal["date", "price", "number"],
-        Field(
-            description="Order of the ads. Unpriced ads sort as the cheapest: set min_price with sort=price to skip them."
-        ),
+        Field(description="Unpriced ads sort cheapest; set min_price to skip them."),
     ] = "date",
-    descending: Annotated[bool, Field(description="Newest / most expensive / highest number first.")] = True,
-    page: Annotated[int, Field(description="Page number, from 1 (20 ads per page).", ge=1)] = 1,
+    descending: Annotated[bool, Field(description="Newest / priciest / highest number first.")] = True,
+    page: Annotated[int, Field(description="Page from 1 (20 per page).", ge=1)] = 1,
 ) -> dict[str, Any]:
     """Search the SIM card numbers users sell on Mobile.ir (Iran's numbered-SIM market): operator, number, price.
 
-    Filter by operator or prefix, digits in the number (e.g. endswith 1111), new/used, prepaid/postpaid, round
-    numbers, province and price. Seller names and phones are not returned; open `url` on the site to contact.
-    `number` is the full 11-digit number as sold.
+    Output `number` is the full 11-digit number; open `url` on the site to contact the seller.
     """
     prefixes = [prefix] if prefix else (OPERATORS[operator] if operator else list(SIM_PREFIX))
     q: list[tuple[str, Any]] = [("ajaxview", "true"), ("sp", ""), ("prenum", ""), ("page", page), ("viewtype", "grid")]
@@ -650,8 +619,7 @@ async def mi_sim_search(
 async def mi_options(what: Literal["brands", "provinces", "shops", "operators"]) -> dict[str, Any]:
     """List the ids the other Mobile.ir tools take: brands, provinces, price-listing shops, SIM operator prefixes.
 
-    Call it when a tool needs a brand, province or shop id you do not have. Brand names (English or Persian) are
-    also accepted directly by the `brand` arguments.
+    Brand names are also accepted directly by `brand` arguments.
     """
     if what == "brands":
         return {"brands": await _brands()}

@@ -28,22 +28,17 @@ SITE_SORT = {
 
 @tool("Compare phones side by side")
 async def mi_compare(
-    ids: Annotated[
-        list[int], Field(description="2 to 4 product ids from mi_search or mi_find.", min_length=2, max_length=4)
-    ],
-    only_differences: Annotated[
-        bool, Field(description="Keep only the spec rows where the products differ (default); false returns every row.")
-    ] = True,
+    ids: Annotated[list[int], Field(description="Product ids from mi_search/mi_find.", min_length=2, max_length=4)],
+    only_differences: Annotated[bool, Field(description="False returns every row.")] = True,
     sections: Annotated[
         list[Literal["general", "body", "display", "memory", "camera", "connectivity", "features", "battery", "misc"]]
         | None,
-        Field(description="Limit to these spec sections, e.g. ['display','battery']; default all."),
+        Field(description="Default all."),
     ] = None,
 ) -> dict[str, Any]:
     """Compare 2 to 4 phones, tablets or watches on Mobile.ir: price range, rating and each spec row side by side.
 
-    Use it after mi_search or mi_find when the user is choosing between models. Values are listed in the same order as
-    `phones`. By default only rows that differ are returned, so the answer stays short; ask for `sections` to focus.
+    `values` follow the order of `phones`. Only differing rows by default.
     """
     sheets = await asyncio.gather(*(mi_phone(i, sections) for i in ids))
     phones = [
@@ -67,15 +62,12 @@ async def mi_compare(
 @tool("User comments on a phone")
 async def mi_comments(
     id: PhoneId,
-    sort: Annotated[
-        Literal["newest", "helpful", "oldest"], Field(description="'helpful' puts the most liked comments first.")
-    ] = "newest",
+    sort: Annotated[Literal["newest", "helpful", "oldest"], Field(description="Order of the comments.")] = "newest",
     limit: Annotated[int, Field(description="Comments to return.", ge=1, le=50)] = 15,
 ) -> dict[str, Any]:
     """Read what Mobile.ir users wrote about a phone, tablet or watch: comment text, date (Persian calendar), likes.
 
-    Use it for real-world opinions (battery, camera, durability) next to mi_phone's rating. Comments are unverified
-    user content; author names are not returned. `reply_to` is the comment id a comment answers.
+    `reply_to` is the comment id a comment answers.
     """
     s = soup(await fetch(f"/phones/comments-{id}-x.aspx"))
     if s.select_one(".user-comments") is None:
@@ -144,24 +136,19 @@ def _items(s) -> list[dict[str, Any]]:
 
 @tool("Mobile.ir news and expert reviews")
 async def mi_articles(
-    source: Annotated[
-        Literal["news", "reviews"], Field(description="'news' = news and features; 'reviews' = expert phone reviews.")
-    ] = "news",
-    query: Annotated[
-        str | None, Field(description="Words to search in the news (news only), e.g. 'سامسونگ'.", max_length=60)
-    ] = None,
+    source: Annotated[Literal["news", "reviews"], Field(description="News or expert phone reviews.")] = "news",
+    query: Annotated[str | None, Field(description="Search words (news only).", max_length=60)] = None,
     phone_id: Annotated[
         int | None,
-        Field(description="Only articles about this product id: related news and intro (news) or its reviews.", ge=1),
+        Field(description="Only articles about this product id.", ge=1),
     ] = None,
-    brand: Annotated[str | None, Field(description="Brand name or id for reviews (see mi_options('brands')).")] = None,
+    brand: Annotated[str | None, Field(description="Brand name or id (reviews).")] = None,
     kind: Annotated[Kind, Field(description="Product class for reviews.")] = "phone",
-    page: Annotated[int, Field(description="Page number, from 1 (20 news or 40 reviews per page).", ge=1)] = 1,
+    page: Annotated[int, Field(description="Page from 1 (20 news / 40 reviews each).", ge=1)] = 1,
 ) -> dict[str, Any]:
     """List the news and the expert reviews on Mobile.ir, newest first, optionally for one phone or brand.
 
-    Use it for 'is there a review of X', 'latest news about Samsung' or 'what is new'. Read one result with
-    mi_article, passing back its `source`, `id` and (for reviews) `phone_id`. News search returns at most 100 hits.
+    Read one result with mi_article, passing back its `source`, `id` and (reviews) `phone_id`.
     """
     if source == "reviews":
         q: dict[str, Any] = {"page": page}
@@ -234,19 +221,16 @@ def _long_text(box: Tag) -> tuple[str, int]:
 async def mi_article(
     source: Annotated[
         Literal["news", "review", "intro"],
-        Field(description="From mi_articles: 'news', 'review' or 'intro' (for 'intro' the id is the product id)."),
+        Field(description="From mi_articles; for 'intro' the id is the product id."),
     ],
-    id: Annotated[int, Field(description="Article id (news id, review id, or product id for 'intro').", ge=1)],
-    phone_id: Annotated[
-        int | None, Field(description="Product id the review belongs to (required for 'review').", ge=1)
-    ] = None,
-    offset: Annotated[int, Field(description="Start at this character, to read a long review in parts.", ge=0)] = 0,
+    id: Annotated[int, Field(description="Article id.", ge=1)],
+    phone_id: Annotated[int | None, Field(description="Product id (required for 'review').", ge=1)] = None,
+    offset: Annotated[int, Field(description="Start character.", ge=0)] = 0,
     max_chars: Annotated[int, Field(description="Characters to return.", ge=500, le=12000)] = 6000,
 ) -> dict[str, Any]:
     """Read the text of one Mobile.ir news item, expert review or product introduction (Persian, images dropped).
 
-    Get `source`, `id` and `phone_id` from mi_articles. Long reviews run to tens of thousands of characters: the answer
-    says `total_chars`, so call again with `offset` to continue. Press-release style text: verify claims before quoting.
+    Take `source`, `id`, `phone_id` from mi_articles. For long texts use `total_chars` and call again with `offset`.
     """
     if source == "news":
         path, params = f"/news/view-{id}-x.aspx", None
@@ -275,15 +259,14 @@ async def mi_article(
 
 @tool("A shop's phone price list")
 async def mi_shop(
-    shop_id: Annotated[int, Field(description="Shop id from mi_options('shops') or mi_shop_prices.", ge=1)],
+    shop_id: Annotated[int, Field(description="Shop id, mi_options('shops').", ge=1)],
     brand: Annotated[str | None, Field(description="Only this brand (name or id).")] = None,
     name_contains: Annotated[str | None, Field(description="Part of the model name.", max_length=40)] = None,
-    page: Annotated[int, Field(description="Page number, from 1 (20 phones per page).", ge=1)] = 1,
+    page: Annotated[int, Field(description="Page from 1 (20 per page).", ge=1)] = 1,
 ) -> dict[str, Any]:
     """Show one Mobile.ir shop's profile and the phones it lists with their current prices in Toman.
 
-    Use it for 'what does shop X sell' or to compare a shop's prices for a brand. For one model across all shops use
-    mi_shop_prices. Phone numbers and e-mail of the shop are not returned; `shop_url` shows them on the site.
+    For one model across all shops use mi_shop_prices. Contact details: open `shop_url`.
     """
     q: dict[str, Any] = {"id": shop_id, "page": page}
     if brand:
@@ -332,17 +315,16 @@ async def mi_shop(
 
 @tool("All models of a brand")
 async def mi_brand_models(
-    brand: Annotated[str, Field(description="Brand name (Samsung, اپل) or id; see mi_options('brands').")],
+    brand: Annotated[str, Field(description="Brand name or id; see mi_options('brands').")],
     kind: Annotated[Literal["all", "phone", "tablet", "smartwatch"], Field(description="Product class.")] = "all",
     sort: Annotated[SORTS, Field(description="Order of the list.")] = "date",
-    descending: Annotated[bool, Field(description="Highest / newest first (default).")] = True,
+    descending: Annotated[bool, Field(description="Highest / newest first.")] = True,
     only_priced: Annotated[bool, Field(description="Only models with a current shop price.")] = False,
-    page: Annotated[int, Field(description="Page number, from 1 (40 models per page).", ge=1)] = 1,
+    page: Annotated[int, Field(description="Page from 1 (40 per page).", ge=1)] = 1,
 ) -> dict[str, Any]:
     """Page through every model Mobile.ir lists for one brand (id, rating, year, screen, camera, lowest shop price).
 
-    Use it when mi_find's 100-row cap is too small or you want a brand's full line-up. Narrow by price or camera with
-    mi_find instead. Read one model with mi_phone; compare several with mi_compare.
+    Use when mi_find's 100-row cap is too small; to filter by price or camera use mi_find.
     """
     bid = await _brand_id(brand)
     q = {
@@ -365,18 +347,15 @@ async def mi_brand_models(
 
 @tool("SIM number market summary")
 async def mi_sim_summary(
-    days: Annotated[Literal[2, 7, 30, 90, -1], Field(description="Ads updated within this many days (-1 = all).")] = 30,
-    condition: Annotated[Literal["any", "new", "used"], Field(description="New (صفر) or used line.")] = "any",
+    days: Annotated[Literal[2, 7, 30, 90, -1], Field(description="Updated within this many days (-1 = all).")] = 30,
+    condition: Annotated[Literal["any", "new", "used"], Field(description="New or used line.")] = "any",
     plan: Annotated[Literal["any", "postpaid", "prepaid"], Field(description="Permanent or credit lines.")] = "any",
     round_only: Annotated[bool, Field(description="Only 'round' (رند) numbers.")] = False,
-    min_price: Annotated[
-        int, Field(description="Toman; ignores placeholder prices such as 1 or 5 that old ads carry.", ge=1)
-    ] = 10000,
+    min_price: Annotated[int, Field(description="Toman; ignores placeholder prices.", ge=1)] = 10000,
 ) -> dict[str, Any]:
     """Summarise the numbered-SIM market on Mobile.ir per operator: ad counts and the three cheapest priced numbers.
 
-    Use it for 'how many Irancell numbers are for sale' or 'cheapest Rightel number'. Drill into one operator with
-    mi_sim_search. Prices are Toman; many ads have no price (negotiable) and are counted in `ads` only.
+    Drill into one operator with mi_sim_search. Unpriced ads are counted in `ads` only.
     """
     ops = ["mci", "irancell", "rightel", "taliya", "shatel"]
     base = {"days": days, "condition": condition, "plan": plan, "round_only": round_only}
