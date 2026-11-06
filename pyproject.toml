@@ -1,6 +1,6 @@
 [project]
 name = "mobile-ir-mcp"
-version = "0.1.1"
+version = "0.2.0"
 description = "Unofficial read-only MCP server for Mobile.ir (mobile.ir), Iran's phone database: specs, shop prices, price history, used phones, SIM numbers."
 readme = "README.md"
 license = "MIT"
