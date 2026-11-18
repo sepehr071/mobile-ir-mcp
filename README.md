@@ -161,24 +161,6 @@ Product ids (`41113`) come from `mi_search`, `mi_find` and `mi_market_prices`. B
 
 All 17 tools are annotated `readOnlyHint: true`.
 
-## How it works
-
-```text
-  AI agent  (Claude, Cursor, Copilot, ...)
-      │
-      │  MCP over stdio
-      ▼
-  mobile-ir-mcp  (runs on your machine)
-      │
-      │  HTTPS
-      └──────▶  www.mobile.ir   spec and shop pages, finder / used-phone / SIM lists, price-chart JSON
-```
-
-`mobile-ir-mcp` runs locally and reads the same public pages and AJAX lists the mobile.ir website uses, with no
-hosted server in between. Mobile.ir has no JSON API, so the server parses the HTML. Requests go out through a
-Chrome-impersonating client with the headers the site's own scripts send. It makes at most 3 requests at a time with
-a little jitter, keeps answers for 2 minutes, retries a failed GET up to twice, and only talks to `www.mobile.ir`.
-
 ## Good to know
 
 - **Prices are Toman, posted by shops and users.** Shops write their own notes (RAM/storage variant, colour, warranty), so several prices exist per model; read `note` before comparing. The site does not vouch for shops.
